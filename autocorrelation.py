@@ -3,6 +3,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import math
 from pandas.plotting import autocorrelation_plot
+import numpy as np
+import pylab as pl
+from scipy import signal
+import scipy.fftpack
+
 
 def autocorr(self, lag=1):
 
@@ -34,11 +39,49 @@ def crosscorr(datax, datay, lag=0):
     """
     return datax.corr(datay.shift(lag))
 
-data = 'data/ecoli1.csv'
+
+def bacteriaExtract(df, BacteriaId):
+
+    dout = pd.DataFrame()
+
+    for i in range (0, df.shape[0]):
+        if df['BacteriaId'].iloc[i] == BacteriaId:
+            #print df.iloc[i]
+            dout = dout.append(df.iloc[i], ignore_index=True)
+
+    return dout
+
+def whatIsBacId(df):
+
+    bacteriaId = df['BacteriaId'].iloc[0]
+
+    return bacteriaId
+
+def dc_blocker(x, r=0.9):
+
+    """ Lag-N cross correlation.
+       Parameters
+       ----------
+       x : pandas.Series objects
+
+       Returns
+       ----------
+       y : pandas.Series objects
+       """
+    y = []
+    y.append(0)
+    for j in range(1, x.shape[0]):
+        y.append(x.iloc[j] - x.iloc[j-1] + r*y[j-1])
+    # for n in range(1, x.shape[0]):
+    #     y[n] = x[n] - x[n - 1] + r * y[n - 1]
+    return y
+
+data = '/Users/idaly666/PycharmProjects/poppingdata/data/Ecoli-Slide-Coverslip.MOV.NCTRQs4ueconmoYkbHqTtk.61.50.1.csv'
 frame_rate = 30
 
 
 df = pd.read_csv(data)
+bacteriaId = (whatIsBacId(df))
 dX = []
 dY = []
 ddX = []
@@ -46,125 +89,206 @@ ddY = []
 dis = []
 phase = []
 velocity = []
-dT = 1 / float(frame_rate)
+# dT = 1 / float(frame_rate)
+dT = 0.033
 
+
+dnew = bacteriaExtract(df, bacteriaId)
+
+print(dnew.shape[0])
+dnew['oldX'] = dnew['X']
+dnew['oldY'] = dnew['Y']
+dnew['X'] = dc_blocker(dnew['X'])
+dnew['Y'] = dc_blocker(dnew['Y'])
 
 '''L2 Euclidean Distance Lag = 1'''
 
-for i in range(0, df.shape[0]):
+for i in range(0, dnew.shape[0]):
     if i == 0:
         dX.append(0)
         dY.append(0)
     else:
-        dX.append(df['X'].iloc[i] - df['X'].iloc[i - 1])
-        dY.append(df['Y'].iloc[i] - df['Y'].iloc[i - 1])
+        dX.append(dnew['X'].iloc[i] - dnew['X'].iloc[i - 1])
+        dY.append(dnew['Y'].iloc[i] - dnew['Y'].iloc[i - 1])
 
 
 '''Displacement Vector'''
 
-df['dX'] = dX
-df['dY'] = dY
+dnew['dX'] = dX
+dnew['dY'] = dY
+
+dXnp = np.asarray(dnew['dX'])
+dYnp = np.asarray(dnew['dY'])
+
+print(dXnp)
+
+yf = scipy.fftpack.fft(dYnp)
+xf = np.linspace(0.0, 1.0/(2.0*dT), dnew.shape[0]/2)
+
+fig, ax = plt.subplots()
+ax.plot(xf, 2.0/dnew.shape[0] * np.abs(yf[:dnew.shape[0]//2]))
+plt.show()
 
 
-for i in range(0, df.shape[0]):
-    x = float((df['dX'][i]))
-    y = float((df['dY'][i]))
+ps = np.abs(np.fft.fft(dXnp))**2
+freqs = np.fft.fftfreq(dXnp.size, dT)
+idx = np.argsort(freqs)
+
+dYnp = np.asarray(dY)
+psY = np.abs(np.fft.fft(dYnp))**2
+freqsY = np.fft.fftfreq(dYnp.size, dT)
+idY = np.argsort(freqsY)
+
+
+plt.figure()
+plt.suptitle('FFT Cartesian', fontsize=13)
+plt.plot(freqsY[idY], psY[idY], label='y')
+plt.plot(freqs[idx], ps[idx], label='x')
+plt.legend()
+plt.show()
+
+# print(dX - dnew['dX'])
+
+# dnew['newX'] = dc_blocker(dnew['X'])
+# dnew['newY'] = dc_blocker(dnew['Y'])
+
+# print(dnew['dX'] - dX)
+
+# print(dc_blocker(dnew['dX']))
+
+
+for i in range(0, dnew.shape[0]):
+    x = float((dnew['dX'][i]))
+    y = float((dnew['dY'][i]))
     dis.append(math.sqrt(x**2 + y**2))
     phase.append(math.atan2(y,x)/math.pi*180 + 180)
 
 
-df['dis'] = dis
-df['phase'] = phase
+dnew['dis'] = dis
+dnew['phase'] = phase
 
 # xVelocity = []
 # yVelocity = []
 # velocity = []
 # angVel = []
 
-# for i in range(0, df.shape[0]):
+# for i in range(0, dnew.shape[0]):
 #     if i == 0:
 #         velocity.append(0)
 #         # xVelocity.append(0)
 #         # yVelocity.append(0)
 #         angVel.append(0)
 #     else:
-#         velocity.append((df['dis'].iloc[i] - df['dis'].iloc[i - 1]) / dT)
-#         # xVelocity.append((df['dX'].iloc[i] - df['dX'].iloc[i - 1]) / dT)
-#         # yVelocity.append((df['dY'].iloc[i] - df['dY'].iloc[i - 1]) / dT)
-#         angVel.append((df['phase'].iloc[i] - df['phase'].iloc[i - 1]) / dT)
+#         velocity.append((dnew['dis'].iloc[i] - dnew['dis'].iloc[i - 1]) / dT)
+#         # xVelocity.append((dnew['dX'].iloc[i] - dnew['dX'].iloc[i - 1]) / dT)
+#         # yVelocity.append((dnew['dY'].iloc[i] - dnew['dY'].iloc[i - 1]) / dT)
+#         angVel.append((dnew['phase'].iloc[i] - dnew['phase'].iloc[i - 1]) / dT)
 
-df['velocity'] = df['dis'] / dT
-df['phaseRad'] = (df['phase'] * math.pi) / float(180)
-# df['xVelocity'] = xVelocity
-# df['yVelocity'] = yVelocity
+dnew['velocity'] = dnew['dis'] / dT
+dnew['phaseRad'] = (dnew['phase'] * math.pi) / float(180)
+# dnew['xVelocity'] = xVelocity
+# dnew['yVelocity'] = yVelocity
 
-# df['angVel'] = angVel
-
-
-xcov = [crosscorr(df['dis'], df['phase'], lag=i) for i in range(df.shape[0])]
+# dnew['angVel'] = angVel
 
 
 
-print("Average autocorrelation of Displacement: %.9f" % df['dis'].autocorr(lag=1))
-print("Average autocorrelation of Phase: %.9f" % df['phase'].autocorr(lag=1))
-print("Average crossocorrelation between Displacement and Phase: %.9f" % crosscorr(df['dis'],df['phase'],lag=0))
+dVelnp = np.asarray(dnew['velocity'])
+dPhasenp = np.asarray(dnew['phaseRad'])
+
+ps = np.abs(np.fft.fft(dVelnp))**2
+freqs = np.fft.fftfreq(dVelnp.size, dT)
+idVel = np.argsort(freqs)
+
+psPhase = np.abs(np.fft.fft(dPhasenp))**2
+freqs = np.fft.fftfreq(dPhasenp.size, dT)
+idPhase = np.argsort(freqs)
 
 
+plt.figure()
+plt.suptitle('FFT Polar', fontsize=13)
+plt.plot(freqsY[idPhase], psY[idPhase], label='phase')
+#plt.plot(freqs[idVel], ps[idVel], label='velocity')
+plt.legend()
+plt.savefig('graphs/fftpolar.png')
+plt.show()
+
+#
+xcov = [crosscorr(dnew['dY'], dnew['dY'], lag=i) for i in range(dnew.shape[0])]
+
+
+print("Average autocorrelation of X: %.9f" % dnew['dX'].autocorr(lag=1))
+print("Average autocorrelation of Y: %.9f" % dnew['dY'].autocorr(lag=1))
+print("Average autocorrelation of Displacement: %.9f" % dnew['dis'].autocorr(lag=1))
+print("Average autocorrelation of Phase: %.9f" % dnew['phase'].autocorr(lag=1))
+# print("Average crossocorrelation between Displacement and Phase: %.9f" % crosscorr(dnew['dis'],dnew['phase'],lag=0))
+
+
+plt.figure()
+plt.suptitle('Bacteria Tracking', fontsize=13)
+plt.plot(dnew['oldX'], dnew['oldY'], label='With Drift')
+plt.plot(dnew['X'], dnew['Y'], label='Without Drift')
+plt.legend()
+plt.savefig('graphs/XY.png')
+plt.show()
 
 
 plt.figure()
 plt.suptitle('Displacement against time', fontsize=13)
-plt.plot(df['Time'], df['dis'])
+plt.plot(dnew['Time'], dnew['dis'])
 plt.savefig('graphs/dis.png')
 plt.show()
 
 plt.figure()
 plt.suptitle('Phase(Degrees) against time', fontsize=13)
-plt.plot(df['Time'], df['phase'])
+plt.plot(dnew['Time'], dnew['phase'])
 plt.savefig('graphs/phase.png')
 plt.show()
 
 # plt.figure()
 # plt.suptitle('xVelocity', fontsize=13)
-# plt.plot(df['Time'], df['xVelocity'])
+# plt.plot(dnew['Time'], dnew['xVelocity'])
 # plt.savefig('graphs/xVelocity.png')
 # plt.show()
 #
 # plt.figure()
 # plt.suptitle('yVelocity', fontsize=13)
-# plt.plot(df['Time'], df['yVelocity'])
+# plt.plot(dnew['Time'], dnew['yVelocity'])
 # plt.savefig('graphs/yVelocity.png')
 # plt.show()
 
 
 plt.figure()
 plt.suptitle('Absolute velocity against time', fontsize=13)
-plt.plot(df['Time'], df['velocity'])
+plt.plot(dnew['Time'], dnew['velocity'])
 plt.savefig('graphs/velocity.png')
 plt.show()
 
 # plt.figure()
 # plt.suptitle('Angular Velocity', fontsize=13)
-# plt.plot(df['Time'], df['angVel'])
+# plt.plot(dnew['Time'], dnew['angVel'])
 # plt.savefig('graphs/angDis.png')
 # plt.show()
 
 
 plt.figure()
-plt.suptitle('Autocorrelation: Displacement', fontsize=13)
-autocorrelation_plot(df['dis'])
+plt.suptitle('Autocorrelation: X and Y without drift', fontsize=13)
+#autocorrelation_plot(dnew['dis'])
+autocorrelation_plot(dnew['dX'], label='X direction')
+autocorrelation_plot(dnew['dY'], label='Y direction')
+plt.legend()
 plt.savefig('graphs/auto_dis.png')
 plt.show()
 
 plt.figure()
 plt.suptitle('Autocorrelation: Absolute Velocity', fontsize=13)
-autocorrelation_plot(df['velocity'])
+autocorrelation_plot(dnew['velocity'])
 plt.savefig('graphs/auto_vel.png')
 plt.show()
 
 plt.figure()
 plt.suptitle('Autocorrelation: Phase', fontsize=13)
-autocorrelation_plot(df['phase'])
+autocorrelation_plot(dnew['phase'])
 plt.savefig('graphs/auto_phase.png')
 plt.show()
 
