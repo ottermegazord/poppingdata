@@ -17,9 +17,6 @@ params = {'legend.fontsize': 'x-large',
          'ytick.labelsize':'18'}
 pylab.rcParams.update(params)
 
-def npautocorr(x):
-    result = np.correlate(x, x, mode='full')
-    return result[result.size/2:]
 
 def autocorr(self, lag=1):
 
@@ -129,9 +126,9 @@ for i in range(0, dnew.shape[0]):
 dnew['dX'] = dX
 dnew['dY'] = dY
 
-# print dnew.to_csv(output, sep=',', index=False, header=True)
-#
-#
+print dnew.to_csv(output, sep=',', index=False, header=True)
+
+
 
 # dXnp = np.asarray(dnew['dX'])
 # dYnp = np.asarray(dnew['dY'])
